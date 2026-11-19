@@ -3,16 +3,134 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>Solbrisa — Open-World Crime Game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1208; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; display: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  .panel { background: rgba(10, 10, 18, 0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; backdrop-filter: blur(2px); }
+  /* Top-left: health + money. */
+  #topleft { position: absolute; top: 14px; left: 14px; padding: 10px 14px; min-width: 190px; }
+  #health-bar { width: 170px; height: 12px; background: rgba(0,0,0,0.55); border-radius: 6px; overflow: hidden; margin-top: 4px; }
+  #health-fill { height: 100%; width: 100%; background: #22c55e; border-radius: 6px; }
+  #health-label { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.75); }
+  #money { font-size: 26px; font-weight: 800; color: #4ade80; margin-top: 6px; }
+  /* Top-right: wanted stars. */
+  #topright { position: absolute; top: 14px; right: 14px; padding: 10px 14px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: rgba(255,255,255,0.55); }
+  #heat-note { font-size: 11px; letter-spacing: 1.5px; font-weight: 700; min-height: 14px; }
+  #mute-note { font-size: 11px; color: rgba(255,255,255,0.6); letter-spacing: 1px; }
+  /* Top-centre: mission. */
+  #mission { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 10px 18px; text-align: center; max-width: 520px; }
+  #mission-name { font-size: 12px; letter-spacing: 3px; color: #ffd166; font-weight: 800; }
+  #objective { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  #mission-timer { font-size: 20px; font-weight: 800; color: #fca5a5; }
+  /* Bottom-right: minimap. */
+  #minimap-wrap { position: absolute; right: 14px; bottom: 14px; padding: 6px; }
+  #minimap { width: 180px; height: 180px; display: block; border-radius: 4px; }
+  /* Bottom-left: speedometer + hints. */
+  #speedo { position: absolute; left: 14px; bottom: 14px; padding: 10px 16px; text-align: center; display: none; }
+  #speed-value { font-size: 34px; font-weight: 800; line-height: 1; }
+  #speed-unit { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.7); }
+  #hint { position: absolute; left: 14px; bottom: 14px; padding: 10px 14px; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.85); transition: opacity 1s; }
+  #speedo + #hint { bottom: 96px; }
+  /* Centre: prompt, crosshair, banner, log. */
+  #prompt { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); padding: 8px 16px; font-size: 15px; font-weight: 700; display: none; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); display: none; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }
+  #ammo { position: absolute; left: 50%; top: 54%; transform: translateX(-50%); font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+  #banner { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); text-align: center; padding: 16px 30px; display: none; }
+  #banner-title { font-size: 30px; font-weight: 900; letter-spacing: 2px; color: #ffd166; }
+  #banner-text { font-size: 15px; margin-top: 6px; color: rgba(255,255,255,0.9); max-width: 520px; }
+  #log { position: absolute; left: 14px; top: 150px; font-size: 13px; line-height: 1.5; }
+  .log-line { background: rgba(10,10,18,0.55); border-radius: 4px; padding: 3px 9px; margin-bottom: 4px; display: table; }
+  /* Full screens: start, pause, busted/wasted. */
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: #fff; z-index: 5; }
+  #start-screen { background: linear-gradient(180deg, rgba(20,10,30,0.55) 0%, rgba(20,10,30,0.82) 100%); display: flex; }
+  #pause-screen, #end-screen { background: rgba(8, 8, 16, 0.72); }
+  .game-title { font-size: 76px; font-weight: 900; letter-spacing: 10px; margin: 0; background: linear-gradient(180deg, #ffe9a8, #ff9d5c); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+  .game-sub { font-size: 17px; letter-spacing: 5px; color: #ffd166; font-weight: 700; margin: 2px 0 18px; }
+  .story { font-size: 15px; line-height: 1.65; max-width: 560px; color: rgba(255,255,255,0.88); margin: 0 0 16px; }
+  .controls { display: grid; grid-template-columns: auto auto; gap: 4px 22px; font-size: 13.5px; text-align: left; color: rgba(255,255,255,0.82); margin-bottom: 20px; }
+  .controls b { color: #fff; }
+  .save-line { font-size: 14px; color: #4ade80; margin-bottom: 6px; font-weight: 600; }
+  .save-line2 { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 18px; }
+  button { pointer-events: auto; cursor: pointer; border: none; border-radius: 8px; font-family: inherit; }
+  .big-button { background: linear-gradient(180deg, #ffb020, #f97316); color: #1a1208; font-size: 20px; font-weight: 900; letter-spacing: 2px; padding: 14px 44px; box-shadow: 0 6px 24px rgba(249, 115, 22, 0.45); }
+  .big-button:hover { filter: brightness(1.08); }
+  .small-button { background: rgba(255,255,255,0.12); color: #fff; font-size: 13px; padding: 8px 18px; margin-top: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .small-button:hover { background: rgba(255,255,255,0.2); }
+  .screen h2 { font-size: 54px; margin: 0 0 10px; letter-spacing: 6px; }
+  .screen p { font-size: 16px; color: rgba(255,255,255,0.85); max-width: 480px; line-height: 1.6; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solbrisa: an open-world crime game. Drive, explore the city, run missions and evade the police."></canvas>
+
+<div id="hud">
+  <div id="topleft" class="panel">
+    <div id="health-label">HEALTH</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="money">$150</div>
+  </div>
+  <div id="topright" class="panel">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="heat-note"></div>
+    <div id="mute-note"></div>
+  </div>
+  <div id="mission" class="panel">
+    <div id="mission-name">First Wheels</div>
+    <div id="objective"></div>
+    <div id="mission-timer"></div>
+  </div>
+  <div id="minimap-wrap" class="panel"><canvas id="minimap"></canvas></div>
+  <div id="speedo" class="panel"><div id="speed-value">0</div><div id="speed-unit">KM/H</div></div>
+  <div id="hint" class="panel">WASD move / drive &nbsp;·&nbsp; Mouse camera &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Space jump / handbrake<br>E steal car &nbsp;·&nbsp; Q pistol &nbsp;·&nbsp; Click shoot / F punch &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</div>
+  <div id="prompt" class="panel"></div>
+  <div id="crosshair"></div>
+  <div id="ammo"></div>
+  <div id="banner" class="panel"><div id="banner-title"></div><div id="banner-text"></div></div>
+  <div id="log"></div>
+</div>
+
+<div id="start-screen" class="screen">
+  <h1 class="game-title">SOLBRISA</h1>
+  <div class="game-sub">AN OPEN-WORLD CRIME STORY</div>
+  <p class="story">Kai Marlow rolls into Solbrisa with $150, no friends and a busted phone. The fixer
+  Vera "Vex" Delgado runs the garage on the south side — and she always has work for a driver
+  who asks no questions. Steal cars, run packages, lose the heat, and own the coast.</p>
+  <div class="controls">
+    <span><b>W A S D</b> — move / drive</span><span><b>Mouse</b> — camera</span>
+    <span><b>Shift</b> — run</span><span><b>Space</b> — jump / handbrake</span>
+    <span><b>E</b> — steal / exit car</span><span><b>Q</b> — draw pistol</span>
+    <span><b>Click</b> — shoot &nbsp; <b>F</b> — punch</span><span><b>P</b> — pause &nbsp; <b>M</b> — mute</span>
+  </div>
+  <div id="start-money" class="save-line"></div>
+  <div id="start-mission" class="save-line2"></div>
+  <button id="start-button" class="big-button">START ENGINE</button>
+  <button id="reset-button" class="small-button">Reset save &amp; start fresh</button>
+</div>
+
+<div id="pause-screen" class="screen">
+  <h2>PAUSED</h2>
+  <p>The city waits. Vex doesn't.</p>
+  <button id="resume-button" class="big-button">RESUME</button>
+  <button id="restart-button" class="small-button">Restart game</button>
+</div>
+
+<div id="end-screen" class="screen">
+  <h2 id="end-title">BUSTED</h2>
+  <p id="end-text"></p>
+  <button id="respawn-button" class="big-button">BACK TO THE STREETS</button>
+</div>
+
 <p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>
 </body>

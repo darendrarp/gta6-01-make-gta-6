@@ -1,53 +1,82 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard + mouse. Held keys are read every frame; one-shot presses (enter car,
+// jump, fire, pause, mute, weapon toggle, interact) are queued as bit flags and
+// taken once by the loop, so a press between frames is never lost or double-counted.
+// Mouse movement steers the camera while the pointer is locked.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export const ACT_JUMP = 1;
+export const ACT_ENTER = 2;
+export const ACT_PAUSE = 4;
+export const ACT_FIRE = 8;
+export const ACT_MELEE = 16;
+export const ACT_WEAPON = 32;
+export const ACT_MUTE = 64;
+export const ACT_CONFIRM = 128;
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const HELD = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'Space']);
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
+export function createInput() {
+  const held = new Set();
   let actions = 0;
+  let mouseDX = 0;
+  let mouseDY = 0;
+  let firing = false;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (event.repeat) return;
+    if (HELD.has(event.code)) held.add(event.code);
+    switch (event.code) {
+      case 'Space': actions |= ACT_JUMP; break;
+      case 'KeyE': actions |= ACT_ENTER; break;
+      case 'KeyP': case 'Escape': actions |= ACT_PAUSE; break;
+      case 'KeyQ': actions |= ACT_WEAPON; break;
+      case 'KeyF': actions |= ACT_MELEE; break;
+      case 'KeyM': actions |= ACT_MUTE; break;
+      case 'Enter': actions |= ACT_CONFIRM; break;
+      default: break;
+    }
+    if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
+      event.preventDefault();
+    }
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+  window.addEventListener('keyup', (event) => held.delete(event.code));
+  window.addEventListener('blur', () => { held.clear(); firing = false; });
+  document.addEventListener('mousemove', (event) => {
+    if (document.pointerLockElement) {
+      mouseDX += event.movementX;
+      mouseDY += event.movementY;
+    }
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+  document.addEventListener('mousedown', (event) => {
+    if (event.button === 0 && document.pointerLockElement) {
+      firing = true;
+      actions |= ACT_FIRE;
+    }
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
+  document.addEventListener('mouseup', (event) => {
+    if (event.button === 0) firing = false;
   });
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    forward() { return (held.has('KeyW') ? 1 : 0) - (held.has('KeyS') ? 1 : 0); },
+    strafe() { return (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0); },
+    run() { return held.has('ShiftLeft') || held.has('ShiftRight'); },
+    handbrake() { return held.has('Space'); },
+    isFiring() { return firing; },
+    takeMouse() {
+      const out = { dx: mouseDX, dy: mouseDY };
+      mouseDX = 0;
+      mouseDY = 0;
+      return out;
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
     takeActions() {
       const taken = actions;
       actions = 0;
       return taken;
     },
+    // Peek without consuming: the frame loop needs to see screen-level
+    // actions (pause, mute, respawn) even when the sim is not running.
+    peekActions() { return actions; },
+    clearAction(mask) { actions &= ~mask; },
+    clearActions() { actions = 0; },
   };
 }
