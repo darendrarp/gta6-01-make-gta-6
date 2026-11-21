@@ -26,6 +26,8 @@
   #mission-name { font-size: 12px; letter-spacing: 3px; color: #ffd166; font-weight: 800; }
   #objective { font-size: 16px; font-weight: 600; margin-top: 2px; }
   #mission-timer { font-size: 20px; font-weight: 800; color: #fca5a5; }
+  /* Under health/money: the recruited crew. */
+  #crew { position: absolute; left: 14px; top: 128px; padding: 8px 12px; font-size: 13px; font-weight: 700; color: #ffd166; letter-spacing: 0.5px; display: none; }
   /* Bottom-right: minimap. */
   #minimap-wrap { position: absolute; right: 14px; bottom: 14px; padding: 6px; }
   #minimap { width: 180px; height: 180px; display: block; border-radius: 4px; }
@@ -45,7 +47,7 @@
   #banner { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); text-align: center; padding: 16px 30px; display: none; }
   #banner-title { font-size: 30px; font-weight: 900; letter-spacing: 2px; color: #ffd166; }
   #banner-text { font-size: 15px; margin-top: 6px; color: rgba(255,255,255,0.9); max-width: 520px; }
-  #log { position: absolute; left: 14px; top: 150px; font-size: 13px; line-height: 1.5; }
+  #log { position: absolute; left: 14px; top: 172px; font-size: 13px; line-height: 1.5; }
   .log-line { background: rgba(10,10,18,0.55); border-radius: 4px; padding: 3px 9px; margin-bottom: 4px; display: table; }
   /* Full screens: start, pause, busted/wasted. */
   .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: #fff; z-index: 5; }
@@ -90,9 +92,10 @@
     <div id="objective"></div>
     <div id="mission-timer"></div>
   </div>
+  <div id="crew" class="panel"></div>
   <div id="minimap-wrap" class="panel"><canvas id="minimap"></canvas></div>
   <div id="speedo" class="panel"><div id="speed-value">0</div><div id="speed-unit">KM/H</div></div>
-  <div id="hint" class="panel">WASD move / drive &nbsp;·&nbsp; Mouse camera &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Space jump / handbrake<br>E steal car &nbsp;·&nbsp; Q pistol &nbsp;·&nbsp; Click shoot / F punch &nbsp;·&nbsp; R race &nbsp;·&nbsp; N night &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</div>
+  <div id="hint" class="panel">WASD move / drive &nbsp;·&nbsp; Mouse camera &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Space jump / handbrake<br>E steal car &nbsp;·&nbsp; Q pistol &nbsp;·&nbsp; Click shoot / F punch &nbsp;·&nbsp; R race &nbsp;·&nbsp; N night &nbsp;·&nbsp; G garage &nbsp;·&nbsp; T tune &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</div>
   <div id="prompt" class="panel"></div>
   <div id="crosshair"></div>
   <div id="ammo"></div>
@@ -112,6 +115,7 @@
     <span><b>E</b> — steal / exit car</span><span><b>Q</b> — draw pistol</span>
     <span><b>Click</b> — shoot &nbsp; <b>F</b> — punch</span><span><b>P</b> — pause &nbsp; <b>M</b> — mute</span>
     <span><b>R</b> — street race at the coast arch</span><span><b>N</b> — day / night</span>
+    <span><b>G</b> — garage: store car / repaint ($150)</span><span><b>T</b> — tune car ($400)</span>
   </div>
   <div id="start-money" class="save-line"></div>
   <div id="start-mission" class="save-line2"></div>

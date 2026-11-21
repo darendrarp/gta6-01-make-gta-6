@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { CAR, COMBAT, DEFAULT_SEED, GARAGE, HEALTH, HOSPITAL, MONEY, PARKED, PEDS, PLAYER_SPAWN, POLICE_STATION, STEP, TRAFFIC } from './config.js';
 import { createRandom } from './random.js';
-import { ACT_CONFIRM, ACT_ENTER, ACT_FIRE, ACT_JUMP, ACT_MELEE, ACT_MUTE, ACT_NIGHT, ACT_PAUSE, ACT_RACE, ACT_WEAPON, createInput } from './input.js';
+import { ACT_CONFIRM, ACT_ENTER, ACT_FIRE, ACT_GARAGE, ACT_JUMP, ACT_MELEE, ACT_MUTE, ACT_NIGHT, ACT_PAUSE, ACT_RACE, ACT_TUNE, ACT_WEAPON, createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { clearSave, loadSave, writeSave } from './save.js';
 import { buildCity } from './city.js';
@@ -16,6 +16,9 @@ import { createPlayer, enterCar, exitCar, nearestEnterableCar, playerSpeed, step
 import { createTraffic, stepTraffic } from './traffic.js';
 import { createPedestrians, hurtPed, scarePeds, stepPedestrians } from './pedestrians.js';
 import { addWanted, clearPolice, createPolice, nearestPoliceDistance, stepPolice } from './police.js';
+import { clearDispatch, createDispatch, stepDispatch } from './dispatch.js';
+import { createCrew, crewNames, recruitCrewMember, stepCrew } from './crew.js';
+import { createGarage, garageNear, garageRepaintTarget, repaintNearestOwned, storeCurrentCar, tuneCurrentCar } from './garage.js';
 import { createCombat } from './combat.js';
 import { createPickups, scatterPickups } from './pickups.js';
 import { createMissions, currentMission, currentStep, missionTarget, startMission, stepMissions } from './missions.js';
@@ -58,6 +61,9 @@ for (let i = 0; i < PARKED.count; i++) {
 const trafficCars = createTraffic(scene, rng, TRAFFIC.count);
 const peds = createPedestrians(scene, rng, PEDS.count);
 const police = createPolice(scene);
+const dispatch = createDispatch(scene);
+const crew = createCrew(scene);
+const garage = createGarage(scene, city);
 const combat = createCombat(scene);
 const pickups = createPickups(scene);
 scatterPickups(pickups, city, rng);
@@ -74,7 +80,7 @@ const save = loadSave();
 const missions = createMissions(scene, save ? save.mission : 0);
 
 const G = {
-  scene, camera, renderer, city, player, peds, police, combat, pickups, races, environment, missions,
+  scene, camera, renderer, city, player, peds, police, dispatch, crew, garage, combat, pickups, races, environment, missions,
   hud, minimap, cameraRig, audio, input, rng, seed,
   cars: [...parkedCars, ...trafficCars],
   money: save ? save.money : MONEY.start,
@@ -184,6 +190,7 @@ function respawn() {
   player.health = HEALTH.max;
   player.mesh.position.set(spot.x, 0, spot.z);
   clearPolice(police);
+  clearDispatch(dispatch);
   const step = currentStep(missions);
   if (step && (step.type === 'timed' || step.type === 'survive')) missions.timer = step.time;
   G.screen = 'play';
@@ -268,8 +275,46 @@ function stepGame(dt) {
     const hour = toggleNight(environment);
     hud.logMessage(isNight(environment) ? `Night falls on Solbrisa — ${hour}:00.` : `Golden hour returns — ${hour}:00.`);
   }
+  if (actions & ACT_GARAGE) {
+    if (!player.onFoot) {
+      if (garageNear(garage, player)) {
+        const res = storeCurrentCar(garage, player);
+        hud.logMessage(res.ok ? 'Stored in the garage.' : res.reason);
+        if (res.ok) audio.pickup();
+      } else {
+        hud.logMessage("Drive into Vex's garage yard to store this car.");
+      }
+    } else {
+      const res = repaintNearestOwned(garage, player, G.money);
+      if (res.ok) {
+        G.money -= res.cost;
+        hud.logMessage('Fresh paint — $150.');
+        audio.pickup();
+        saveGame();
+      } else if (garageRepaintTarget(garage, player)) {
+        hud.logMessage(res.reason);
+      }
+      // No stored car nearby: G quietly does nothing out here.
+    }
+  }
+  if (actions & ACT_TUNE) {
+    if (!player.onFoot && garageNear(garage, player)) {
+      const res = tuneCurrentCar(garage, player, G.money);
+      if (res.ok) {
+        G.money -= res.cost;
+        hud.logMessage(`Tuned to level ${res.level}/3 — top speed ${Math.round(res.topSpeed * 3.6)} km/h.`);
+        audio.mission();
+        saveGame();
+      } else {
+        hud.logMessage(res.reason);
+      }
+    } else if (!player.onFoot) {
+      hud.logMessage("Drive into Vex's garage yard to tune this car.");
+    }
+  }
 
   const allCars = [...G.cars, ...police.cars];
+  if (dispatch.roadblock) allCars.push(...dispatch.roadblock.cars);
   if (races.active && races.rival) allCars.push(races.rival);
   if (player.onFoot) {
     stepPlayerOnFoot(player, active, cameraRig.yaw, dt, city);
@@ -314,6 +359,14 @@ function stepGame(dt) {
     }
   });
 
+  // SPD dispatch answers the heat after the pursuit units move: roadblocks,
+  // then Air One. Deployments get a banner; everything gets a log line.
+  stepDispatch(dispatch, police, player, city, dt, G.time, isNight(environment), (event) => {
+    if (event.banner) hud.banner('SPD DISPATCH', event.text, 4);
+    hud.logMessage(event.text);
+  });
+  stepCrew(crew, player, dt, city);
+
   pickups.stepPickups(dt, player, G.time, onPickup);
   combat.stepEffects(dt);
   stepEnvironment(environment, dt);
@@ -336,6 +389,10 @@ function stepGame(dt) {
     } else if (event.type === 'collected') {
       hud.logMessage(`Drop ${event.index}/${event.total} collected.`);
       audio.pickup();
+      if (event.recruit) {
+        const member = recruitCrewMember(crew, event.recruit, player.pos);
+        if (member) hud.logMessage(`${member.name} joined the crew!`);
+      }
     } else if (event.type === 'failed') {
       hud.banner('Too slow', event.text, 3);
     }
@@ -392,6 +449,11 @@ function renderFrame(dt) {
 
   const step = currentStep(missions);
   const car = nearestEnterableCar(player, G.cars);
+  const garagePrompt = !player.onFoot && garageNear(garage, player)
+    ? 'G — store car in the garage · T — tune ($400)'
+    : player.onFoot && garageRepaintTarget(garage, player)
+      ? 'G — repaint car ($150)'
+      : '';
   hud.update(performance.now(), {
     money: G.money,
     health: Math.ceil(player.health),
@@ -402,9 +464,10 @@ function renderFrame(dt) {
     missionName: races.active ? 'Street Race' : missions.active && currentMission(missions) ? currentMission(missions).name : 'Free roam',
     objective: races.active ? raceObjective(races) : missions.active && step ? step.text : 'Solbrisa is yours. Explore, steal, survive.',
     timer: races.active ? races.timer : step && (step.type === 'timed' || step.type === 'survive') ? missions.timer : null,
-    prompt: raceNearStart(races, player) ? 'Press R to start the street race' : player.onFoot && car ? 'Press E to steal the car' : driving ? 'E — exit car · Space — handbrake' : '',
+    prompt: raceNearStart(races, player) ? 'Press R to start the street race' : garagePrompt || (player.onFoot && car ? 'Press E to steal the car' : driving ? 'E — exit car · Space — handbrake' : ''),
     armed: player.armed,
     ammo: player.ammo,
+    crew: crewNames(crew),
     showHint: !G.shotMode && G.screen === 'play' && G.time - G.playStart < 25,
     muted: G.muted,
   });

@@ -1,4 +1,4 @@
-// The screenshot scenes behind ?shot=chase|street|coast|combat|mission|start|race|night.
+// The screenshot scenes behind ?shot=chase|street|coast|combat|mission|start|race|night|garage.
 // Each one stages the real game — a real car, real police, a real mission —
 // then plays it forward with a scripted pilot for a fixed number of steps, so
 // the frame is what a short game really looks like and the same seed always
@@ -11,6 +11,7 @@ import { jumpToMission } from './missions.js';
 import { enterCar } from './player.js';
 import { startStreetRace } from './races.js';
 import { setTimeOfDay } from './environment.js';
+import { recruitCrewMember } from './crew.js';
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -43,13 +44,17 @@ function putPlayerInCar(G, x, z, heading, speed) {
 }
 
 function stageChase(G) {
-  // Cover shot: driving east on 36th with three stars and police on the tail,
-  // mid Package Run so the objective shows.
+  // Cover shot: driving east on 36th at four stars mid Roadblock Run — the
+  // SPD roadblock parked across the road ahead, Air One overhead, police on
+  // the tail, and the dispatch line in the log. The heli pin sits over the
+  // road, not to either side: the street canyon is the only open sky in
+  // this frame — a pin over the blocks is occluded by the towers, and at
+  // its patrol altitude of 38 it would fly clean over the top of the frame.
   G.money = 1250;
-  jumpToMission(G.missions, 1, 1);
+  jumpToMission(G.missions, 8, 0);
   const car = putPlayerInCar(G, -60, 39.4, Math.PI / 2, 18);
-  addWanted(G.police, 3, 0);
-  G.cameraRig.setFixed({ yaw: -Math.PI / 2, pitch: 0.32, distance: 12 });
+  addWanted(G.police, 4, 0);
+  G.cameraRig.setFixed({ yaw: -Math.PI / 2, pitch: 0.26, distance: 12 });
   return {
     steps: 240,
     pilot: makePilot(1, () => clamp((39.4 - car.pos.z) * 0.2, -1, 1)),
@@ -125,6 +130,49 @@ function stageChase(G) {
             p1.pos.z = 46.2;
             p1.mesh.position.set(p1.pos.x, 0, p1.pos.z);
           }
+          // The dispatch roadblock, pulled into the frame ahead of the
+          // player: two police cars parked across the road, cops beside
+          // them. The roadblock lives in dispatch, not police.cars.
+          const rb = G.dispatch.roadblock;
+          if (rb) {
+            const bx = car.pos.x + 30;
+            const bz = 36;
+            const placeRbCar = (c, x, z, heading) => {
+              if (!c) return;
+              c.pos.x = x; c.pos.z = z; c.heading = heading; c.speed = 0;
+              c.mesh.position.set(x, 0, z); c.mesh.rotation.y = heading;
+            };
+            placeRbCar(rb.cars[0], bx, bz - 2.9, 0);
+            placeRbCar(rb.cars[1], bx, bz + 2.9, Math.PI);
+            const placeRbCop = (cop, x, z) => {
+              if (!cop) return;
+              cop.pos.x = x; cop.pos.z = z;
+              cop.mesh.position.set(x, 0, z);
+            };
+            placeRbCop(rb.cops[0], bx - 5, bz - 5.5);
+            placeRbCop(rb.cops[1], bx + 5, bz + 5.5);
+            rb.x = bx; rb.z = bz; rb.axis = 'x';
+          } else {
+            // Fallback: no roadblock yet — park two chase cars across the
+            // road by hand, the way Tier 1 staged the frame.
+            const c2 = G.police.cars[2];
+            if (c2) {
+              c2.pos.x = car.pos.x + 30; c2.pos.z = 32.6; c2.heading = 0; c2.speed = 0;
+              c2.mesh.position.set(c2.pos.x, 0, c2.pos.z); c2.mesh.rotation.y = 0;
+            }
+            const c3 = G.police.cars[3];
+            if (c3) {
+              c3.pos.x = car.pos.x + 30; c3.pos.z = 39.4; c3.heading = Math.PI; c3.speed = 0;
+              c3.mesh.position.set(c3.pos.x, 0, c3.pos.z); c3.mesh.rotation.y = Math.PI;
+            }
+          }
+          // Air One, pinned above the road ahead — the open sky in this
+          // frame (see the stage comment for why the pin is not at patrol
+          // altitude or off to the side).
+          if (G.dispatch.heli) {
+            G.dispatch.heliPin = { x: car.pos.x + 30, y: 9, z: car.pos.z + 2 };
+          }
+          G.hud.logMessage('SPD DISPATCH: Roadblock ahead — Air One overhead');
         },
       },
     ],
@@ -278,6 +326,78 @@ function stageCombat(G) {
           const p1 = G.peds[1];
           if (p1) { p1.pos.x = -44; p1.pos.z = -58; p1.mesh.position.set(-44, 0, -58); }
           scarePeds(G.peds, -36, -50, 30);
+          // Rook has Kai's back: the wheelman stands beside him, and the
+          // crew panel shows in the HUD.
+          const rook = recruitCrewMember(G.crew, 'rook', { x: -38, z: -46 });
+          if (rook) {
+            rook.pos.x = -38; rook.pos.z = -46;
+            rook.heading = Math.PI;
+            rook.mesh.position.set(-38, 0, -46);
+            rook.mesh.rotation.y = Math.PI;
+          }
+        },
+      },
+    ],
+  };
+}
+
+function stageGarage(G) {
+  // Night at Vex's Garage: the full crew gathered by the three stored cars,
+  // the garage sign lit, the mission beacon rising behind them. The player
+  // stands south of the slots — outside the goto radius, so the mission
+  // does not complete mid-staging and no police answer a calm night frame —
+  // and EAST of the row, so the camera looks up the row at an angle and
+  // the three cars separate in perspective instead of stacking behind the
+  // player (straight down the row, only taillights showed).
+  G.money = 2450;
+  setTimeOfDay(G.environment, 23);
+  jumpToMission(G.missions, 7, 1);
+  G.player.pos.x = -174;
+  G.player.pos.z = -184;
+  G.player.heading = Math.PI;
+  G.player.mesh.position.set(-174, 0, -184);
+  // Three stored cars in the garage slots, bright paint for the night frame.
+  const parked = G.cars.filter((c) => c.kind === 'parked');
+  const paints = [0xecf0f1, 0xe74c3c, 0x22d3ee];
+  const slots = [[-180, -188], [-180, -194], [-180, -200]];
+  slots.forEach(([x, z], i) => {
+    const c = parked[i];
+    if (!c) return;
+    c.pos.x = x; c.pos.z = z; c.heading = Math.PI; c.speed = 0;
+    c.mesh.position.set(x, 0, z); c.mesh.rotation.y = Math.PI;
+    c.mesh.children[0].material.color.setHex(paints[i]);
+    c.owned = true;
+    G.garage.slots[i] = c;
+  });
+  // The full crew, recruited and waiting by the cars.
+  recruitCrewMember(G.crew, 'rook', { x: -176.5, z: -187 });
+  recruitCrewMember(G.crew, 'mira', { x: -183.5, z: -193 });
+  recruitCrewMember(G.crew, 'dante', { x: -176.5, z: -199 });
+  // The camera sits close and nearly level: at night the road surface is
+  // near-black, so a downward tilt would fill the bottom of the frame with
+  // void — level keeps the cars, the crew, the sign and the skyline in it.
+  G.cameraRig.setFixed({ yaw: 0, pitch: 0.05, distance: 7 });
+  return {
+    steps: 150,
+    pilot: makePilot(0, 0),
+    midways: [
+      {
+        at: 149,
+        fn() {
+          // Final frame: pin the crew beside their cars (stepCrew pulls
+          // them toward the player while staging runs) and face them at
+          // the camera so their colours read.
+          const place = (member, x, z) => {
+            if (!member) return;
+            member.pos.x = x; member.pos.z = z;
+            member.heading = 0;
+            member.mesh.position.set(x, 0, z);
+            member.mesh.rotation.y = 0;
+          };
+          place(G.crew.members[0], -176.5, -187);
+          place(G.crew.members[1], -183.5, -193);
+          place(G.crew.members[2], -176.5, -199);
+          G.player.health = 100;
         },
       },
     ],
@@ -408,5 +528,6 @@ export function stageShot(name, G) {
   if (name === 'start') return stageStart(G);
   if (name === 'race') return stageRace(G);
   if (name === 'night') return stageNight(G);
+  if (name === 'garage') return stageGarage(G);
   return stageStreet(G);
 }

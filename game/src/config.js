@@ -63,6 +63,10 @@ export const POLICE = {
   bustTime: 2.4,
   decayDelay: 6, // seconds unseen before a star drops
   decaySeenRange: 46,
+  roadblockMinLevel: 3, // SPD deploys a roadblock from 3 stars
+  airMinLevel: 4, // Air One joins the chase from 4 stars
+  heliAltitude: 38, // Air One's patrol altitude
+  heliOrbitRadius: 18, // Air One's slow orbit around the player
 };
 
 export const HEALTH = { max: 100, crashDiv: 14, punch: 6, copPunch: 7 };

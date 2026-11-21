@@ -13,6 +13,8 @@ export const ACT_MUTE = 64;
 export const ACT_CONFIRM = 128;
 export const ACT_RACE = 256; // R: start a street race at the start arch
 export const ACT_NIGHT = 512; // N: flip day/night
+export const ACT_GARAGE = 1024; // G: store the car / repaint in the garage yard
+export const ACT_TUNE = 2048; // T: tune the car in the garage yard
 
 const HELD = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'Space']);
 
@@ -35,6 +37,8 @@ export function createInput() {
       case 'KeyM': actions |= ACT_MUTE; break;
       case 'KeyR': actions |= ACT_RACE; break;
       case 'KeyN': actions |= ACT_NIGHT; break;
+      case 'KeyG': actions |= ACT_GARAGE; break;
+      case 'KeyT': actions |= ACT_TUNE; break;
       case 'Enter': actions |= ACT_CONFIRM; break;
       default: break;
     }

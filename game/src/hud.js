@@ -16,6 +16,7 @@ export function createHud() {
     missionName: $('mission-name'),
     objective: $('objective'),
     timer: $('mission-timer'),
+    crew: $('crew'),
     hint: $('hint'),
     prompt: $('prompt'),
     crosshair: $('crosshair'),
@@ -74,7 +75,10 @@ export function createHud() {
       div.textContent = text;
       els.log.appendChild(div);
       while (els.log.children.length > 4) els.log.removeChild(els.log.firstChild);
-      setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 6000);
+      // Lines linger 15 s: 6 s is short to read while driving, and a line
+      // fired in the last staging step must still be up when the screenshot
+      // frame is painted (slow renderers take seconds per frame).
+      setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 15000);
     },
     update(now, data) {
       if (bannerUntil && now > bannerUntil) {
@@ -113,6 +117,8 @@ export function createHud() {
       }
       els.missionName.textContent = data.missionName || '';
       els.timer.textContent = data.timer != null ? `${Math.ceil(data.timer)}s` : '';
+      els.crew.textContent = data.crew ? `CREW: ${data.crew}` : '';
+      els.crew.style.display = data.crew ? 'block' : 'none';
       els.prompt.textContent = data.prompt || '';
       els.prompt.style.display = data.prompt ? 'block' : 'none';
       els.crosshair.style.display = data.armed && !data.driving ? 'block' : 'none';

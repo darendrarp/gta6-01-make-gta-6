@@ -13,6 +13,7 @@ export function createPolice(scene) {
     level: 0,
     unseenTimer: 0,
     hidden: false,
+    airWatch: false, // Air One overhead: the player is never hidden from the sky
     cars: [],
     cops: [],
     bustTimer: 0,
@@ -200,7 +201,9 @@ export function stepPolice(police, player, dt, city, allCars, rng, now, onEvent)
       ...police.cops.map((c) => Math.hypot(c.pos.x - target.x, c.pos.z - target.z)),
       Infinity,
     );
-    police.hidden = nearest > POLICE.decaySeenRange;
+    // Air One's watch counts as seen: the heat never drops while the
+    // helicopter is overhead, however far the ground units fall behind.
+    police.hidden = nearest > POLICE.decaySeenRange && !police.airWatch;
     if (police.hidden) {
       police.unseenTimer += dt;
       if (police.unseenTimer >= POLICE.decayDelay) {
@@ -240,6 +243,7 @@ export function clearPolice(police) {
   police.level = 0;
   police.unseenTimer = 0;
   police.bustTimer = 0;
+  police.airWatch = false;
   while (police.cars.length > 0) removePoliceCar(police, police.cars[0]);
   while (police.cops.length > 0) removeCop(police, police.cops[0]);
 }

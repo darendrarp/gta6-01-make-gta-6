@@ -1,9 +1,10 @@
 // The story: Kai Marlow, broke and new in Solbrisa, runs jobs for Vera "Vex"
-// Delgado, the fixer who owns the garage on the south side. Seven missions
+// Delgado, the fixer who owns the garage on the south side. Ten missions
 // chain in order; each step shows an objective on the HUD, a marker on the
 // minimap and a light beacon in the world. Completing one pays cash and
 // starts the next. Step types: enterCar, goto, timed, loseWanted, collect
-// (pick up N drops in order) and survive (hold a wanted level for T seconds).
+// (pick up N drops in order — or recruit the crew, one member per drop)
+// and survive (hold a wanted level for T seconds).
 
 import * as THREE from 'three';
 import { DINER, GARAGE, HIDEOUT, LOOKOUT, MARINA } from './config.js';
@@ -70,6 +71,34 @@ const MISSIONS = [
       { text: 'Checkpoint 1: Coast Lookout in 75 seconds', type: 'timed', target: LOOKOUT, radius: 12, time: 75 },
       { text: 'Checkpoint 2: Marina Pier in 75 seconds', type: 'timed', target: MARINA, radius: 12, time: 75 },
       { text: "Checkpoint 3: Vex's Hideout", type: 'goto', target: HIDEOUT, radius: 10 },
+    ],
+  },
+  {
+    name: 'The Crew Gathers',
+    brief: 'Vex: "Time to build a crew, kid. Rook drives, Mira watches, Dante hits. Pick them up — Marina, Diner, Hideout — then bring them home."',
+    reward: 700,
+    steps: [
+      { text: 'Recruit the crew — Rook at the Marina, Mira at the Diner, Dante at the Hideout', type: 'collect', targets: [MARINA, DINER, HIDEOUT], radius: 10, recruit: ['rook', 'mira', 'dante'] },
+      { text: "Bring the crew to Vex's Garage", type: 'goto', target: GARAGE, radius: 10 },
+    ],
+  },
+  {
+    name: 'Roadblock Run',
+    brief: 'Vex: "Four stars, kid. SPD roadblocks on every road out, Air One overhead. Make the lookout — then vanish."',
+    reward: 1000,
+    steps: [
+      { text: 'Reach the Coast Lookout in 90 seconds — roadblocks ahead', type: 'timed', target: LOOKOUT, radius: 12, time: 90, wantedOnStart: 4, alert: 'Roadblocks ahead — Air One is tracking you!' },
+      { text: 'Lose the cops — stay out of sight until the heat drops', type: 'loseWanted' },
+    ],
+  },
+  {
+    name: 'The Big Score',
+    brief: 'Vex: "The harbor vault run. Three drops, five stars, one clean getaway. This is the job that makes us legends."',
+    reward: 1500,
+    steps: [
+      { text: 'Hit the three vault drops (Marina, Lookout, Diner)', type: 'collect', targets: [MARINA, LOOKOUT, DINER], radius: 10, wantedOnStart: 3 },
+      { text: 'Hold 5 stars for 30 seconds — the whole city is watching', type: 'survive', wanted: 5, time: 30 },
+      { text: "Vanish to Vex's Hideout in 90 seconds", type: 'timed', target: HIDEOUT, radius: 10, time: 90 },
     ],
   },
 ];
@@ -205,8 +234,10 @@ export function stepMissions(missions, player, policeLevel, dt, addWanted, now) 
       if (d < (step.radius || 10)) {
         missions.collectIndex += 1;
         placeBeacon(missions);
+        // Every drop reports, including the last one — a 'recruit' step
+        // signs one crew member per drop, and the last member counts too.
+        events.push({ type: 'collected', index: missions.collectIndex, total: step.targets.length, recruit: step.recruit?.[missions.collectIndex - 1] });
         if (missions.collectIndex >= step.targets.length) done = true;
-        else events.push({ type: 'collected', index: missions.collectIndex, total: step.targets.length });
       }
     } else {
       done = true;

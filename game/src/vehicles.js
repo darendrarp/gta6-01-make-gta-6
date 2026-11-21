@@ -104,7 +104,7 @@ export function animateCar(car, dt, time) {
  * car-to-car bumps against `others`. Returns crash strength 0..1.
  */
 export function driveCar(car, throttle, steer, handbrake, dt, city, others) {
-  const maxF = CAR.maxSpeed;
+  const maxF = car.topSpeed ?? CAR.maxSpeed; // tuned cars run faster (garage.js)
   const maxR = CAR.reverseSpeed;
   if (throttle > 0) car.speed += CAR.accel * throttle * dt;
   else if (throttle < 0) {
