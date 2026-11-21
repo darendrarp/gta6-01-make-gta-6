@@ -11,6 +11,8 @@ export const ACT_MELEE = 16;
 export const ACT_WEAPON = 32;
 export const ACT_MUTE = 64;
 export const ACT_CONFIRM = 128;
+export const ACT_RACE = 256; // R: start a street race at the start arch
+export const ACT_NIGHT = 512; // N: flip day/night
 
 const HELD = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'Space']);
 
@@ -31,6 +33,8 @@ export function createInput() {
       case 'KeyQ': actions |= ACT_WEAPON; break;
       case 'KeyF': actions |= ACT_MELEE; break;
       case 'KeyM': actions |= ACT_MUTE; break;
+      case 'KeyR': actions |= ACT_RACE; break;
+      case 'KeyN': actions |= ACT_NIGHT; break;
       case 'Enter': actions |= ACT_CONFIRM; break;
       default: break;
     }

@@ -1,7 +1,9 @@
 // The story: Kai Marlow, broke and new in Solbrisa, runs jobs for Vera "Vex"
-// Delgado, the fixer who owns the garage on the south side. Four missions chain
-// in order; each step shows an objective on the HUD, a marker on the minimap
-// and a light beacon in the world. Completing one pays cash and starts the next.
+// Delgado, the fixer who owns the garage on the south side. Seven missions
+// chain in order; each step shows an objective on the HUD, a marker on the
+// minimap and a light beacon in the world. Completing one pays cash and
+// starts the next. Step types: enterCar, goto, timed, loseWanted, collect
+// (pick up N drops in order) and survive (hold a wanted level for T seconds).
 
 import * as THREE from 'three';
 import { DINER, GARAGE, HIDEOUT, LOOKOUT, MARINA } from './config.js';
@@ -42,6 +44,34 @@ const MISSIONS = [
       { text: "Reach Vex's Hideout", type: 'goto', target: HIDEOUT, radius: 10 },
     ],
   },
+  {
+    name: 'Night Shift',
+    brief: 'Vex: "Three cash drops around the city, all waiting. Grab them before the other crew does — then bring it all home."',
+    reward: 700,
+    steps: [
+      { text: 'Collect the 3 cash drops (Marina, Diner, Hideout)', type: 'collect', targets: [MARINA, DINER, HIDEOUT], radius: 10 },
+      { text: "Bring the cash to Vex's Garage", type: 'goto', target: GARAGE, radius: 10 },
+    ],
+  },
+  {
+    name: 'Heat Wave',
+    brief: 'Vex: "Time to make some noise. Three stars, thirty seconds — show the whole city you own these streets. My crew keeps the heat coming if it cools off."',
+    reward: 600,
+    steps: [
+      { text: 'Hold 3 stars for 30 seconds — stay visible', type: 'survive', wanted: 3, time: 30, wantedOnStart: 3 },
+      { text: 'Now go quiet — lose the cops', type: 'loseWanted' },
+    ],
+  },
+  {
+    name: 'Coast Sprint',
+    brief: 'Vex: "The coast road, three checkpoints, no mercy. The lookout, the marina, then home. Fastest run in Solbrisa — make it yours."',
+    reward: 900,
+    steps: [
+      { text: 'Checkpoint 1: Coast Lookout in 75 seconds', type: 'timed', target: LOOKOUT, radius: 12, time: 75 },
+      { text: 'Checkpoint 2: Marina Pier in 75 seconds', type: 'timed', target: MARINA, radius: 12, time: 75 },
+      { text: "Checkpoint 3: Vex's Hideout", type: 'goto', target: HIDEOUT, radius: 10 },
+    ],
+  },
 ];
 
 function makeBeacon(scene) {
@@ -78,6 +108,7 @@ export function createMissions(scene, startIndex) {
     step: 0,
     active: startIndex < MISSIONS.length,
     timer: 0,
+    collectIndex: 0, // which drop a 'collect' step is pointing at
     bannerAt: 0,
     completed: startIndex,
   };
@@ -94,7 +125,10 @@ export function currentStep(missions) {
 
 export function missionTarget(missions) {
   const step = currentStep(missions);
-  return step && step.target ? step.target : null;
+  if (!step) return null;
+  // A collect step points at its next uncollected drop.
+  if (step.type === 'collect') return step.targets[Math.min(missions.collectIndex, step.targets.length - 1)] || null;
+  return step.target || null;
 }
 
 function placeBeacon(missions) {
@@ -111,7 +145,8 @@ function beginStep(missions, addWanted, now) {
   const step = currentStep(missions);
   if (!step) return null;
   if (step.wantedOnStart) addWanted(step.wantedOnStart, now);
-  if (step.type === 'timed') missions.timer = step.time;
+  if (step.type === 'timed' || step.type === 'survive') missions.timer = step.time;
+  if (step.type === 'collect') missions.collectIndex = 0;
   placeBeacon(missions);
   return step.alert || null;
 }
@@ -131,7 +166,8 @@ export function jumpToMission(missions, index, step) {
   missions.step = step;
   missions.active = true;
   const s = currentStep(missions);
-  if (s && s.type === 'timed') missions.timer = s.time;
+  if (s && (s.type === 'timed' || s.type === 'survive')) missions.timer = s.time;
+  if (s && s.type === 'collect') missions.collectIndex = 0;
   placeBeacon(missions);
 }
 
@@ -161,6 +197,34 @@ export function stepMissions(missions, player, policeLevel, dt, addWanted, now) 
     }
     const d = Math.hypot(step.target.x - pos.x, step.target.z - pos.z);
     if (d < step.radius) done = true;
+  } else if (step.type === 'collect') {
+    // Visit each drop in order; the beacon and minimap follow the next one.
+    const target = step.targets[missions.collectIndex];
+    if (target) {
+      const d = Math.hypot(target.x - pos.x, target.z - pos.z);
+      if (d < (step.radius || 10)) {
+        missions.collectIndex += 1;
+        placeBeacon(missions);
+        if (missions.collectIndex >= step.targets.length) done = true;
+        else events.push({ type: 'collected', index: missions.collectIndex, total: step.targets.length });
+      }
+    } else {
+      done = true;
+    }
+  } else if (step.type === 'survive') {
+    // The clock only runs while the heat is on — but the heat is the
+    // mission's own doing: if the cops lose the player and the level
+    // drops, Vex's crew makes noise and brings a star back within
+    // seconds, so the mission can never soft-lock on a lost star.
+    if (policeLevel < (step.wanted || 1)) {
+      if (now - (missions._heatAt || -99) > 2) {
+        missions._heatAt = now;
+        addWanted(1, now);
+      }
+    } else {
+      missions.timer -= dt;
+    }
+    if (missions.timer <= 0) done = true;
   } else if (step.type === 'enterCar') {
     if (!player.onFoot) done = true;
   } else if (step.type === 'loseWanted') {

@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { CAR, COMBAT, DEFAULT_SEED, GARAGE, HEALTH, HOSPITAL, MONEY, PARKED, PEDS, PLAYER_SPAWN, POLICE_STATION, STEP, TRAFFIC } from './config.js';
 import { createRandom } from './random.js';
-import { ACT_CONFIRM, ACT_ENTER, ACT_FIRE, ACT_JUMP, ACT_MELEE, ACT_MUTE, ACT_PAUSE, ACT_WEAPON, createInput } from './input.js';
+import { ACT_CONFIRM, ACT_ENTER, ACT_FIRE, ACT_JUMP, ACT_MELEE, ACT_MUTE, ACT_NIGHT, ACT_PAUSE, ACT_RACE, ACT_WEAPON, createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { clearSave, loadSave, writeSave } from './save.js';
 import { buildCity } from './city.js';
@@ -17,7 +17,10 @@ import { createTraffic, stepTraffic } from './traffic.js';
 import { createPedestrians, hurtPed, scarePeds, stepPedestrians } from './pedestrians.js';
 import { addWanted, clearPolice, createPolice, nearestPoliceDistance, stepPolice } from './police.js';
 import { createCombat } from './combat.js';
+import { createPickups, scatterPickups } from './pickups.js';
 import { createMissions, currentMission, currentStep, missionTarget, startMission, stepMissions } from './missions.js';
+import { abortRace, createRaces, raceNearStart, raceObjective, raceTarget, startStreetRace, stepRaces } from './races.js';
+import { createEnvironment, isNight, stepEnvironment, toggleNight } from './environment.js';
 import { createHud } from './hud.js';
 import { createMinimap } from './minimap.js';
 import { createCameraRig } from './camera.js';
@@ -56,6 +59,10 @@ const trafficCars = createTraffic(scene, rng, TRAFFIC.count);
 const peds = createPedestrians(scene, rng, PEDS.count);
 const police = createPolice(scene);
 const combat = createCombat(scene);
+const pickups = createPickups(scene);
+scatterPickups(pickups, city, rng);
+const races = createRaces(scene);
+const environment = createEnvironment(scene, city, createRandom(seed ^ 0x51ed27));
 const input = createInput();
 const audio = createAudio();
 const hud = createHud();
@@ -67,7 +74,7 @@ const save = loadSave();
 const missions = createMissions(scene, save ? save.mission : 0);
 
 const G = {
-  scene, camera, renderer, city, player, peds, police, combat, missions,
+  scene, camera, renderer, city, player, peds, police, combat, pickups, races, environment, missions,
   hud, minimap, cameraRig, audio, input, rng, seed,
   cars: [...parkedCars, ...trafficCars],
   money: save ? save.money : MONEY.start,
@@ -82,19 +89,6 @@ const G = {
 };
 player.health = HEALTH.max;
 player.ammo = COMBAT.pistolAmmoStart;
-
-// Pickups scattered on sidewalks: ammo, health and cash.
-{
-  const spots = [];
-  let guard = 0;
-  while (spots.length < 14 && guard++ < 200) {
-    const x = (rng() * 2 - 1) * 240;
-    const z = (rng() * 2 - 1) * 240;
-    if (!city.pointBlocked(x, z, 3)) spots.push([x, z]);
-  }
-  const types = ['ammo', 'ammo', 'ammo', 'ammo', 'health', 'health', 'health', 'health', 'cash', 'cash', 'cash', 'cash', 'cash', 'cash'];
-  spots.forEach(([x, z], i) => combat.spawnPickup(types[i % types.length], x, z));
-}
 
 function saveGame() {
   writeSave({ money: Math.floor(G.money), mission: missions.index, completed: missions.completed });
@@ -165,6 +159,7 @@ function onPickup(type) {
 
 function endGame(kind) {
   if (G.screen !== 'play') return;
+  abortRace(races);
   if (!player.onFoot) exitCar(player, city);
   const penalty = Math.floor(G.money * (kind === 'busted' ? MONEY.bustLoss : MONEY.wastedLoss));
   G.money = Math.max(0, G.money - penalty);
@@ -190,7 +185,7 @@ function respawn() {
   player.mesh.position.set(spot.x, 0, spot.z);
   clearPolice(police);
   const step = currentStep(missions);
-  if (step && step.type === 'timed') missions.timer = step.time;
+  if (step && (step.type === 'timed' || step.type === 'survive')) missions.timer = step.time;
   G.screen = 'play';
   hud.showScreen('play');
   hud.banner('Back on the streets', G.endKind === 'busted' ? 'Vex is waiting at the garage.' : 'Patch up and get back to work.', 4);
@@ -258,8 +253,24 @@ function stepGame(dt) {
     else doMelee();
   }
   if (active.isFiring() && player.armed && player.onFoot) doShoot();
+  if (actions & ACT_RACE) {
+    if (races.active) {
+      hud.logMessage('Race already running — finish it first.');
+    } else if (raceNearStart(races, player)) {
+      if (startStreetRace(races, player)) {
+        hud.banner('Street Race', 'First to the Coast Lookout wins $600!', 5);
+        hud.logMessage('Race started — beat the rival to the Lookout.');
+        audio.mission();
+      }
+    }
+  }
+  if (actions & ACT_NIGHT) {
+    const hour = toggleNight(environment);
+    hud.logMessage(isNight(environment) ? `Night falls on Solbrisa — ${hour}:00.` : `Golden hour returns — ${hour}:00.`);
+  }
 
   const allCars = [...G.cars, ...police.cars];
+  if (races.active && races.rival) allCars.push(races.rival);
   if (player.onFoot) {
     stepPlayerOnFoot(player, active, cameraRig.yaw, dt, city);
   } else {
@@ -303,7 +314,9 @@ function stepGame(dt) {
     }
   });
 
-  combat.stepPickups(dt, player, G.time, onPickup);
+  pickups.stepPickups(dt, player, G.time, onPickup);
+  combat.stepEffects(dt);
+  stepEnvironment(environment, dt);
 
   const events = stepMissions(missions, player, police.level, dt, (n, now) => addWanted(police, n, now), G.time);
   for (const event of events) {
@@ -320,8 +333,30 @@ function stepGame(dt) {
     } else if (event.type === 'step') {
       if (event.alert) hud.banner('Watch out', event.alert, 4);
       hud.logMessage(event.step.text);
+    } else if (event.type === 'collected') {
+      hud.logMessage(`Drop ${event.index}/${event.total} collected.`);
+      audio.pickup();
     } else if (event.type === 'failed') {
       hud.banner('Too slow', event.text, 3);
+    }
+  }
+
+  const raceEvents = stepRaces(races, player, dt, city, allCars);
+  for (const event of raceEvents) {
+    if (event.type === 'raceCheckpoint') {
+      hud.logMessage(`Checkpoint ${event.index}/${event.total}.`);
+      audio.pickup();
+    } else if (event.type === 'raceWon') {
+      G.money += event.reward;
+      hud.banner('Race won', `First to the Lookout in ${event.time.toFixed(1)}s — +$${event.reward}`, 5);
+      hud.logMessage(`Street race won (+$${event.reward}).`);
+      audio.mission();
+      saveGame();
+    } else if (event.type === 'raceLost') {
+      hud.banner('Race lost', `The rival beat you to the Lookout — ${event.time.toFixed(1)}s`, 5);
+      hud.logMessage('Street race lost. The rival takes the glory.');
+    } else if (event.type === 'raceAborted') {
+      hud.logMessage('Race abandoned.');
     }
   }
   if (!missions.active && G.time > 1 && !G._freeRoamLogged) {
@@ -352,6 +387,7 @@ function renderFrame(dt) {
   }
   for (const car of G.cars) animateCar(car, dt, G.time);
   for (const car of police.cars) animateCar(car, dt, G.time);
+  if (races.active && races.rival) animateCar(races.rival, dt, G.time);
   renderer.render(scene, camera);
 
   const step = currentStep(missions);
@@ -363,16 +399,16 @@ function renderFrame(dt) {
     hidden: police.hidden,
     driving,
     speedKmh: driving ? Math.abs(player.car.speed) * 3.6 : 0,
-    missionName: missions.active && currentMission(missions) ? currentMission(missions).name : 'Free roam',
-    objective: missions.active && step ? step.text : 'Solbrisa is yours. Explore, steal, survive.',
-    timer: step && step.type === 'timed' ? missions.timer : null,
-    prompt: player.onFoot && car ? 'Press E to steal the car' : driving ? 'E — exit car · Space — handbrake' : '',
+    missionName: races.active ? 'Street Race' : missions.active && currentMission(missions) ? currentMission(missions).name : 'Free roam',
+    objective: races.active ? raceObjective(races) : missions.active && step ? step.text : 'Solbrisa is yours. Explore, steal, survive.',
+    timer: races.active ? races.timer : step && (step.type === 'timed' || step.type === 'survive') ? missions.timer : null,
+    prompt: raceNearStart(races, player) ? 'Press R to start the street race' : player.onFoot && car ? 'Press E to steal the car' : driving ? 'E — exit car · Space — handbrake' : '',
     armed: player.armed,
     ammo: player.ammo,
     showHint: !G.shotMode && G.screen === 'play' && G.time - G.playStart < 25,
     muted: G.muted,
   });
-  minimap.draw(G.time, player, missionTarget(missions), police, combat.pickups);
+  minimap.draw(G.time, player, races.active ? raceTarget(races) : missionTarget(missions), police, pickups.pickups);
   const nearest = nearestPoliceDistance(police, targetPos);
   audio.update(dt, driving ? speedNorm : 0, police.level > 0 ? Math.max(0, 1 - nearest / 70) : 0);
 }

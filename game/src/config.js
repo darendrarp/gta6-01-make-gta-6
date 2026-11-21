@@ -80,6 +80,27 @@ export const COMBAT = {
 
 export const MONEY = { start: 150, pickup: 50, bustLoss: 0.1, wastedLoss: 0.1 };
 
+// Street race: a straight sprint north up the coast road from the start arch
+// to the Lookout. The player triggers it by driving into the start zone and
+// pressing R; the rival AI drives the same checkpoints at a fixed cruise.
+export const RACE = {
+  start: { x: 300, z: 200 },
+  startRadius: 14,
+  checkpoints: [
+    { x: 300, z: 120 },
+    { x: 300, z: 0 },
+    { x: 300, z: -120 },
+    { x: 300, z: -180 },
+  ],
+  checkpointRadius: 12,
+  rivalCruise: 21,
+  reward: 600,
+};
+
+// Day/night: the game opens at golden hour (18:00), the light the whole city
+// was built around. N flips to full night (23:00) and back.
+export const NIGHT = { dayHour: 18, nightHour: 23 };
+
 export const PALETTE = {
   skyTop: 0x2e5f8a,
   skyHorizon: 0xffb36b,

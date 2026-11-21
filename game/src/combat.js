@@ -1,48 +1,17 @@
 // Combat: a hitscan pistol (Q to draw, click to fire, ammo pickups), a melee
-// punch (F, or click unarmed), tracers and impact sparks, and world pickups —
-// ammo boxes, health kits and cash — that respawn after a while.
+// punch (F, or click unarmed), tracers and impact sparks. Pickups live in
+// pickups.js; this file only spends the ammo.
 
 import * as THREE from 'three';
 import { COMBAT } from './config.js';
 import { hurtPed, scarePeds } from './pedestrians.js';
 import { hurtCop } from './police.js';
 
-const PICKUP_TYPES = {
-  ammo: { color: 0x27ae60, size: 0.55 },
-  health: { color: 0xe8e8e8, size: 0.55 },
-  cash: { color: 0xf1c40f, size: 0.45 },
-};
-
 export function createCombat(scene) {
   const tracers = [];
   const sparks = [];
-  const pickups = [];
   const raycaster = new THREE.Raycaster();
   const tmpV = new THREE.Vector3();
-
-  function makePickupMesh(type, x, z) {
-    const def = PICKUP_TYPES[type];
-    const group = new THREE.Group();
-    const box = new THREE.Mesh(
-      new THREE.BoxGeometry(def.size, def.size, def.size),
-      new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 0.35, roughness: 0.4 }),
-    );
-    box.castShadow = true;
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.7, 0.95, 24),
-      new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.06;
-    group.add(box, ring);
-    group.position.set(x, 0.9, z);
-    scene.add(group);
-    return group;
-  }
-
-  function spawnPickup(type, x, z) {
-    pickups.push({ type, x, z, mesh: makePickupMesh(type, x, z), taken: 0 });
-  }
 
   function spawnSparks(pos, colorHex) {
     const count = 10;
@@ -69,8 +38,6 @@ export function createCombat(scene) {
   }
 
   return {
-    pickups,
-    spawnPickup,
     spawnSparks,
     /** Fire one hitscan shot from the player toward the camera aim. Returns a report. */
     shoot(player, camera, peds, cops, cars, buildings, now) {
@@ -158,23 +125,8 @@ export function createCombat(scene) {
       }
       return best;
     },
-    /** Pickups: bob, spin, grant on touch, respawn after 30 s. */
-    stepPickups(dt, player, now, onPickup) {
-      for (const p of pickups) {
-        if (p.taken > 0) {
-          p.taken -= dt;
-          if (p.taken <= 0) p.mesh.visible = true;
-          continue;
-        }
-        p.mesh.rotation.y += dt * 2;
-        p.mesh.children[0].position.y = 0.15 + Math.sin(now * 2.4 + p.x) * 0.12;
-        const d = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
-        if (player.onFoot && d < 1.4) {
-          p.taken = 30;
-          p.mesh.visible = false;
-          onPickup(p.type);
-        }
-      }
+    /** Tracers and sparks: fade, fall and clean themselves up. */
+    stepEffects(dt) {
       for (let i = tracers.length - 1; i >= 0; i--) {
         tracers[i].life -= dt;
         if (tracers[i].life <= 0) {

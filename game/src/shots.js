@@ -1,13 +1,16 @@
-// The screenshot scenes behind ?shot=chase|street|coast|combat|mission|start. Each one
-// stages the real game — a real car, real police, a real mission — then plays
-// it forward with a scripted pilot for a fixed number of steps, so the frame is
-// what a short game really looks like and the same seed always gives the same
-// frame. main.js runs the steps, renders, and sets window.__shotReady.
+// The screenshot scenes behind ?shot=chase|street|coast|combat|mission|start|race|night.
+// Each one stages the real game — a real car, real police, a real mission —
+// then plays it forward with a scripted pilot for a fixed number of steps, so
+// the frame is what a short game really looks like and the same seed always
+// gives the same frame. main.js runs the steps, renders, and sets
+// window.__shotReady.
 
 import { addWanted, hurtCop } from './police.js';
 import { scarePeds } from './pedestrians.js';
 import { jumpToMission } from './missions.js';
 import { enterCar } from './player.js';
+import { startStreetRace } from './races.js';
+import { setTimeOfDay } from './environment.js';
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -281,6 +284,103 @@ function stageCombat(G) {
   };
 }
 
+function stageNight(G) {
+  // Night drive east on 36th at 23:00 — dark blue sky, moon and stars,
+  // streetlights warm against it — mid Night Shift so the new collect
+  // objective shows. The camera sits nearly level so the sky fills the top
+  // of the frame instead of the road.
+  G.money = 1450;
+  setTimeOfDay(G.environment, 23);
+  jumpToMission(G.missions, 4, 0);
+  const car = putPlayerInCar(G, -60, 39.4, Math.PI / 2, 18);
+  // Bright paint for the night frame: the seeded parked car is dark navy,
+  // and a dark car under moonlight reads as nothing but taillights. White,
+  // not yellow — yellow paint under blue moonlight renders dark olive,
+  // while white reflects the moonlight as pale blue-grey. The body is the
+  // first mesh of the car group; its material is per-car.
+  car.mesh.children[0].material.color.setHex(0xecf0f1);
+  G.cameraRig.setFixed({ yaw: -Math.PI / 2, pitch: -0.1, distance: 12 });
+  return {
+    steps: 240,
+    pilot: makePilot(1, () => clamp((39.4 - car.pos.z) * 0.2, -1, 1)),
+    midways: [
+      {
+        at: 239,
+        fn() {
+          // Final frame: two traffic cars ahead with headlights on, and two
+          // pedestrians on the south sidewalk — the night street reads alive.
+          const t = G.cars.filter((c) => c.kind === 'traffic');
+          if (t[0]) {
+            t[0].pos.x = car.pos.x + 38;
+            t[0].pos.z = 39.4;
+            t[0].heading = Math.PI / 2;
+            t[0].speed = 12;
+            t[0].mesh.position.set(t[0].pos.x, 0, t[0].pos.z);
+            t[0].mesh.rotation.y = t[0].heading;
+          }
+          if (t[1]) {
+            t[1].pos.x = car.pos.x + 52;
+            t[1].pos.z = 33.5;
+            t[1].heading = -Math.PI / 2;
+            t[1].speed = 12;
+            t[1].mesh.position.set(t[1].pos.x, 0, t[1].pos.z);
+            t[1].mesh.rotation.y = t[1].heading;
+          }
+          const p0 = G.peds[0];
+          if (p0) {
+            p0.pos.x = car.pos.x + 12;
+            p0.pos.z = 46.2;
+            p0.mesh.position.set(p0.pos.x, 0, p0.pos.z);
+          }
+          const p1 = G.peds[1];
+          if (p1) {
+            p1.pos.x = car.pos.x + 26;
+            p1.pos.z = 46.2;
+            p1.mesh.position.set(p1.pos.x, 0, p1.pos.z);
+          }
+        },
+      },
+    ],
+  };
+}
+
+function stageRace(G) {
+  // Street race up the coast road: the player and the rival launch from the
+  // start arch side by side, the cyan checkpoint gate ahead. The pilot holds
+  // the west lane (x = 296.6) so the rival keeps the east lane beside it.
+  G.money = 1250;
+  const car = putPlayerInCar(G, 296.6, 200, Math.PI, 0);
+  startStreetRace(G.races, G.player);
+  // Camera behind the player looking north, angled east so the rival reads
+  // on the right of the frame and the ocean behind it.
+  G.cameraRig.setFixed({ yaw: -0.45, pitch: 0.34, distance: 12 });
+  return {
+    steps: 150,
+    pilot: makePilot(1, () => clamp((296.6 - car.pos.x) * 0.2, -1, 1)),
+    midways: [
+      {
+        at: 149,
+        fn() {
+          // Final frame: the rival pinned beside the player — a photo
+          // finish in the making. The rival cruises at 21 against the
+          // player's 27, so without this it drifts out of the frame.
+          // Nearly alongside: any further back and it falls off the right
+          // edge of the frame at this camera angle.
+          const rival = G.races.rival;
+          if (rival) {
+            rival.pos.x = car.pos.x + 6.8;
+            rival.pos.z = car.pos.z + 2;
+            rival.heading = Math.PI;
+            rival.speed = 21;
+            rival.mesh.position.set(rival.pos.x, 0, rival.pos.z);
+            rival.mesh.rotation.y = rival.heading;
+          }
+        },
+      },
+    ],
+  };
+}
+
 function stageMission(G) {
   // On foot on the road to the garage, the beacon straight ahead.
   G.money = 450;
@@ -306,5 +406,7 @@ export function stageShot(name, G) {
   if (name === 'combat') return stageCombat(G);
   if (name === 'mission') return stageMission(G);
   if (name === 'start') return stageStart(G);
+  if (name === 'race') return stageRace(G);
+  if (name === 'night') return stageNight(G);
   return stageStreet(G);
 }

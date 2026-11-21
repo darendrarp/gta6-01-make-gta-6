@@ -81,8 +81,10 @@ export function buildCity(scene, rng) {
   const color = new THREE.Color();
 
   // Light, sky and fog: low warm sun in the west, golden haze on the horizon.
+  // The rig is returned as `lights` so environment.js can move the clock.
   scene.fog = new THREE.Fog(PALETTE.fog, 220, 1100);
-  scene.add(skyDome());
+  const sky = skyDome();
+  scene.add(sky);
   const hemi = new THREE.HemisphereLight(0xffd9b0, 0x5a4a3a, 0.85);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(PALETTE.sun, 2.4);
@@ -251,7 +253,8 @@ export function buildCity(scene, rng) {
   poleGeo.translate(0, 3.5, 0);
   const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2c2f36 }), lightSpots.length);
   const headGeo = new THREE.BoxGeometry(1.6, 0.18, 0.5);
-  const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe6a8 }), lightSpots.length);
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xffe6a8 });
+  const heads = new THREE.InstancedMesh(headGeo, headMat, lightSpots.length);
   lightSpots.forEach(([x, z, rot], i) => {
     dummy.position.set(x, 0, z);
     dummy.rotation.set(0, rot, 0);
@@ -371,5 +374,5 @@ export function buildCity(scene, rng) {
     return hit;
   }
 
-  return { colliders, parkedSpots, buildingMesh: buildings, pointBlocked, resolveCircle };
+  return { colliders, parkedSpots, buildingMesh: buildings, pointBlocked, resolveCircle, lights: { sun, hemi, sky, headMat } };
 }

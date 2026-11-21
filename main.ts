@@ -1,4 +1,8 @@
 // SOLBRISA — a three.js open-world crime game for make.fun gta6-01.
+// Tier 2 (21 Nov 2026): three new missions (collect, survive, checkpoint
+// chain — seven in total), street racing against an AI rival (races.js),
+// a day/night cycle (environment.js), and pickups split into their own
+// module (pickups.js). New race + night screenshots replace street + coast.
 // Tier 1 (21 Nov 2026): re-staged screenshots — denser streets, visible chase,
 // a combat frame — same game, same systems, livelier frames.
 // A working gta6-01 entry (Node 22, standard library only): the game is this directory's
