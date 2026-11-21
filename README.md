@@ -24,7 +24,7 @@ node serve.ts
 
 Then open http://localhost:8080. No build step, no network requests at runtime — the game is plain static files under `game/` (three.js is vendored).
 
-Screenshots are staged deterministically: `?shot=chase|street|coast|mission|start&seed=7`.
+Screenshots are staged deterministically: `?shot=chase|street|coast|combat|mission|start&seed=7`. Tier 1 (21 Nov 2026): denser streets (30 traffic, 60 peds, 30 parked), police visible in the chase frame, and a new combat frame replacing the mission shot.
 
 ---
 

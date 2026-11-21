@@ -369,7 +369,7 @@ function renderFrame(dt) {
     prompt: player.onFoot && car ? 'Press E to steal the car' : driving ? 'E — exit car · Space — handbrake' : '',
     armed: player.armed,
     ammo: player.ammo,
-    showHint: G.screen === 'play' && G.time - G.playStart < 25,
+    showHint: !G.shotMode && G.screen === 'play' && G.time - G.playStart < 25,
     muted: G.muted,
   });
   minimap.draw(G.time, player, missionTarget(missions), police, combat.pickups);

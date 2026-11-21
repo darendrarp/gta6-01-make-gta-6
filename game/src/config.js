@@ -50,9 +50,9 @@ export const CAR = {
   enterRange: 3.4,
 };
 
-export const TRAFFIC = { count: 14, speedMin: 9, speedMax: 14, turnChance: 0.22 };
-export const PEDS = { count: 26, walkMin: 1.1, walkMax: 2.0, fleeSpeed: 5.5 };
-export const PARKED = { count: 16 };
+export const TRAFFIC = { count: 30, speedMin: 9, speedMax: 14, turnChance: 0.22 };
+export const PEDS = { count: 60, walkMin: 1.1, walkMax: 2.0, fleeSpeed: 5.5 };
+export const PARKED = { count: 30 };
 
 export const POLICE = {
   maxCars: 5,
